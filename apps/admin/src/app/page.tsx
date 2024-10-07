@@ -61,6 +61,7 @@ export default async function Home() {
 
           {session?.user && <LatestPost />}
         </div>
+
       </main>
     </HydrateClient>
   );
