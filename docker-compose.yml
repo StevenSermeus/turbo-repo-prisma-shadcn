@@ -1,0 +1,137 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.certres.acme.tlschallenge=true"
+      - "--certificatesresolvers.certres.acme.email=demo@gmail.com"
+      - "--certificatesresolvers.certres.acme.storage=/letsencrypt/acme.json"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "letsencrypt:/letsencrypt"
+    depends_on:
+      admin:
+        condition: service_healthy
+      back-office:
+        condition: service_healthy
+      pure-life:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_DB: $POSTGRES_DB
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  admin:
+    user: "nextjs"
+    build:
+      context: .
+      dockerfile: ./apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_CLIENTVAR: "clientvar"
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+      NEXTAUTH_SECRET: "secret"
+      NEXTAUTH_URL: "http://auth:3000"
+      DISCORD_CLIENT_ID: "clientid"
+      DISCORD_CLIENT_SECRET: "client"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://admin:3000/"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      update-db:
+        condition: service_completed_successfully
+  back-office:
+    user: "nextjs"
+    build:
+      context: .
+      dockerfile: ./apps/back-office/Dockerfile
+      args:
+        NEXT_PUBLIC_CLIENTVAR: "clientvar"
+    working_dir: /app
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+      NEXTAUTH_SECRET: "secret"
+      NEXTAUTH_URL: "http://auth:3000"
+      DISCORD_CLIENT_ID: "clientid"
+      DISCORD_CLIENT_SECRET: "client"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://back-office:3000/"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      update-db:
+        condition: service_completed_successfully
+  pure-life:
+    user: "nextjs"
+    build:
+      context: .
+      dockerfile: ./apps/pure-life/Dockerfile
+      args:
+        NEXT_PUBLIC_CLIENTVAR: "clientvar"
+    working_dir: /app
+    ports:
+      - "3002:3000"
+    environment:
+      DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+      NEXTAUTH_SECRET: "secret"
+      NEXTAUTH_URL: "http://auth:3000"
+      DISCORD_CLIENT_ID: "clientid"
+      DISCORD_CLIENT_SECRET: "client"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://pure-life:3000/"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      update-db:
+        condition: service_completed_successfully
+
+  update-db:
+    build:
+      context: .
+      dockerfile: ./packages/database/Dockerfile
+    working_dir: /app
+    environment:
+      DATABASE_URL: postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@postgres:5432/$POSTGRES_DB
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  letsencrypt:

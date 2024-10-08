@@ -11,7 +11,8 @@
       "cache": false
     },
     "db:push": {
-      "cache": false
+      "cache": false,
+      "env": ["DATABASE_URL"]
     },
     "lint": {
       "dependsOn": ["^lint"]
